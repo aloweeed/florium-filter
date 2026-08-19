@@ -5,4 +5,6 @@ Filter your proxy from annoying bots by passing parkour 🦅
 /floriumfilterreload - reloads configuration
 > floriumfilter.reload
 
-Join to my telegram channel - https://t.me/alow3d_dev
+Social links:
+telegram channel - https://t.me/alow3d_dev
+discord - https://dsc.gg/florium

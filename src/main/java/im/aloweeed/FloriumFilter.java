@@ -16,6 +16,7 @@ import net.elytrium.limboapi.api.LimboFactory;
 import net.elytrium.limboapi.api.chunk.Dimension;
 import net.elytrium.limboapi.api.chunk.VirtualWorld;
 import net.elytrium.limboapi.api.event.LoginLimboRegisterEvent;
+import net.elytrium.limboapi.api.player.GameMode;
 import net.elytrium.limboapi.thirdparty.commons.kyori.serialization.Serializer;
 import net.elytrium.limboapi.thirdparty.commons.kyori.serialization.Serializers;
 import net.kyori.adventure.text.Component;
@@ -29,6 +30,7 @@ import java.io.File;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 
 @Plugin(
@@ -86,14 +88,30 @@ public class FloriumFilter {
             }
 
             reload();
+            source.sendMessage(serializer.deserialize(Settings.it.STRINGS.RELOADED));
+        });
+        this.server.getCommandManager().register("sendfilter", (SimpleCommand) invocation -> {
+            CommandSource source = invocation.source();
 
             if (source instanceof Player player) {
-                player.sendMessage(
-                        MiniMessage.miniMessage().deserialize("FloriumFilter reloaded.")
-                );
+                if (!player.hasPermission("floriumfilter.send")) {
+                    return;
+                }
             }
 
-            logger.info("FloriumFilter reloaded");
+            if (invocation.arguments().length == 1) {
+                Optional<Player> plr = server.getPlayer(invocation.arguments()[0]);
+                if (plr.isPresent()) {
+                    Player player = plr.get();
+                    this.limbo.spawnPlayer(
+                            player,
+                            new FilterSessionHandler(this.factory, this)
+                    );
+                    source.sendMessage(serializer.deserialize(Settings.it.STRINGS.SENT_FILTER.formatted(player.getUsername())));
+                } else {
+                    source.sendMessage(serializer.deserialize(Settings.it.STRINGS.NOT_FOUND));
+                }
+            }
         });
 
         reload();
@@ -118,13 +136,45 @@ public class FloriumFilter {
     private void reload() {
         Settings.it.reload(configFile, Settings.it.PREFIX);
 
+        try {
+            String[] rangeX = Settings.it.GENERATION.RANDOMIZE_X.split(":");
+            FilterSessionHandler.minX = Integer.parseInt(rangeX[0]);
+            FilterSessionHandler.maxX = Integer.parseInt(rangeX[1]);
+
+            String[] rangeY = Settings.it.GENERATION.RANDOMIZE_Y.split(":");
+            FilterSessionHandler.minY = Integer.parseInt(rangeY[0]);
+            FilterSessionHandler.maxY = Integer.parseInt(rangeY[1]);
+
+            String[] rangeZ = Settings.it.GENERATION.RANDOMIZE_Z.split(":");
+            FilterSessionHandler.minZ = Integer.parseInt(rangeZ[0]);
+            FilterSessionHandler.maxZ = Integer.parseInt(rangeZ[1]);
+        } catch (Exception e) {
+            logger.warn("Failed to load \"generation\" section, check your range values - " + e.getMessage());
+        }
+        {
+            FilterSessionHandler.base_blocks.clear();
+            FilterSessionHandler.final_blocks.clear();
+            for (String block : Settings.it.GENERATION.PARKOUR_BLOCKS) {
+                FilterSessionHandler.base_blocks.add(factory.createSimpleBlock(block));
+            }
+            for (String block : Settings.it.GENERATION.FINAL_PARKOUR_BLOCKS) {
+                FilterSessionHandler.final_blocks.add(factory.createSimpleBlock(block));
+            }
+        }
+
         VirtualWorld virtualWorld = this.factory.createVirtualWorld(
                 Settings.it.MAIN.DIMENSION_TYPE,
                 0, 30, 0,
                 0, 0
         );
 
-        this.limbo = factory.createLimbo(virtualWorld);
+        if (this.limbo != null) {
+            this.limbo.dispose();
+        }
+        this.limbo = factory.createLimbo(virtualWorld)
+                .setName("FloriumFilter")
+                .setGameMode(GameMode.ADVENTURE)
+                .setShouldUpdateTags(false);
 
         ComponentSerializer<Component, Component, String> serializer = Settings.it.SERIALIZER.getSerializer();
         if (serializer == null) {

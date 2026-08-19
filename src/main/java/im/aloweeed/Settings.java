@@ -4,6 +4,9 @@ import net.elytrium.limboapi.api.chunk.Dimension;
 import net.elytrium.limboapi.thirdparty.commons.config.YamlConfig;
 import net.elytrium.limboapi.thirdparty.commons.kyori.serialization.Serializers;
 
+import java.util.ArrayList;
+import java.util.List;
+
 public class Settings extends YamlConfig {
     @Ignore
     public static final Settings it = new Settings();
@@ -39,6 +42,9 @@ public class Settings extends YamlConfig {
     public static class STRINGS {
         public String TITLE = "{PRFX}";
         public String SUBTITLE = "<gray>пройдите паркур";
+        public String RELOADED = "{PRFX} <gray>- <green>Конфиг перезагружен";
+        public String SENT_FILTER = "{PRFX} <gray>- <green>Игрок <white>%s</white> отправлен в бот-фильтр";
+        public String NOT_FOUND = "{PRFX} <gray>- <red>Игрок не найден";
     }
     @Create
     public VALIDATE VALIDATE;
@@ -47,5 +53,57 @@ public class Settings extends YamlConfig {
     public static class VALIDATE {
         public boolean ENABLED = true;
         public String SKIP_BLOCK_KICK = "{PRFX}{NL}<red>похоже вы бот :(";
+    }
+    @Create
+    public GENERATION GENERATION;
+
+    @Comment("Parkour generation settings")
+    public static class GENERATION {
+        @Comment({
+                "Distance between blocks by \"width\"",
+                "Highly recommended to not change it (if value will be so small players can skip blocks and validate check will be so angry >:x)"
+        })
+        public String RANDOMIZE_X = "-2:2";
+        @Comment({
+                "Distance between blocks by \"length\"",
+                "Highly recommended to not change it (if value will be so small players can skip blocks and validate check will be so angry >:x)",
+                "NOTE: value must be positive"
+        })
+        public String RANDOMIZE_Z = "3:4";
+        @Comment({
+                "Distance between blocks by Y",
+                "Highly recommended to not change it (if value will be so small players can skip blocks and validate check will be so angry >:x)"
+        })
+        public String RANDOMIZE_Y = "-1:1";
+
+        @Comment({
+                "====== BLOCK LISTS ======",
+                "",
+                "FloriumFilter uses limbo api so you need to define block like that - minecraft:oak_log[axis=y]",
+                "if you don't know block name you can use F3+H in game + debug stick",
+                "",
+                "Base parkour blocks"
+        })
+        public List<String> PARKOUR_BLOCKS = new ArrayList<>(List.of(
+                "minecraft:stone",
+                "minecraft:cobblestone",
+                "minecraft:mossy_cobblestone",
+                "minecraft:stone_bricks",
+                "minecraft:mossy_stone_bricks",
+                "minecraft:bricks",
+                "minecraft:andesite",
+                "minecraft:diorite",
+                "minecraft:granite",
+                "minecraft:deepslate",
+                "minecraft:cobbled_deepslate",
+                "minecraft:deepslate_bricks",
+                "minecraft:deepslate_tiles"
+        ));
+        @Comment({
+                "Final parkour block if you want randomize just put values like in parkour_blocks"
+        })
+        public List<String> FINAL_PARKOUR_BLOCKS = new ArrayList<>(List.of(
+                "minecraft:gold_block"
+        ));
     }
 }

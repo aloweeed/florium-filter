@@ -1,6 +1,9 @@
 package im.aloweeed;
 
+import com.velocitypowered.api.network.ProtocolVersion;
 import com.velocitypowered.api.scheduler.ScheduledTask;
+import com.velocitypowered.proxy.protocol.packet.chat.ComponentHolder;
+import com.velocitypowered.proxy.protocol.packet.title.GenericTitlePacket;
 import net.elytrium.limboapi.api.Limbo;
 import net.elytrium.limboapi.api.LimboFactory;
 import net.elytrium.limboapi.api.LimboSessionHandler;
@@ -21,6 +24,12 @@ import java.util.Random;
 public class FilterSessionHandler implements LimboSessionHandler {
     private long fallTime = -1;
 
+    // config cache $
+    public static int minX, maxX, minY, maxY, minZ, maxZ;
+
+    public static ArrayList<VirtualBlock> base_blocks = new ArrayList<>();
+    public static ArrayList<VirtualBlock> final_blocks = new ArrayList<>();
+
     private final LimboFactory factory;
     private final PacketFactory packets;
     private LimboPlayer player;
@@ -37,7 +46,7 @@ public class FilterSessionHandler implements LimboSessionHandler {
 
     private ArrayList<Vec> blocks = new ArrayList<Vec>();
 
-    PreparedPacket teleportPacket, chunkPacket, botMessage;
+    PreparedPacket teleportPacket, chunkPacket, sound;
 
     private record Vec(int x, int y, int z) {
 
@@ -49,29 +58,38 @@ public class FilterSessionHandler implements LimboSessionHandler {
         this.plugin = plugin;
     }
 
-    private void generateParkour(VirtualChunk chunk, int startX, int startY, int startZ, int length) {
+    private void generateParkour(VirtualChunk chunk) {
         Random rand = new Random();
-        int x = startX;
-        int y = startY;
-        int z = startZ;
+        int x = 8;
+        int y = 66;
+        int z = 0;
 
-        VirtualBlock baseBlock = factory.createSimpleBlock("minecraft:stone");
-        VirtualBlock finalBlock = factory.createSimpleBlock("minecraft:gold_block");
+        int lastX = 0, lastY = 0, lastZ = 0;
 
-        for (int i = 0; i < length; i++) {
-            if (z < 0 || z > 15 || x < 0 || x > 15 || y < 0) break;
-            boolean isLastBlock = (i == length - 1);
+//        VirtualBlock baseBlock = factory.createSimpleBlock("minecraft:stone");
+//        VirtualBlock finalBlock = factory.createSimpleBlock("minecraft:gold_block");
+
+        for (int i = 0; i < 15; i++) {
+            if (z < 0 || z > 14 || x < 0 || x > 15 || y < 0) break;
+            lastX = x;
+            lastY = y;
+            lastZ = z;
             chunk.setBlock(x, y, z,
                     new SimpleBlock(true, false, true,
-                            isLastBlock ? finalBlock.getModernID() : baseBlock.getModernID()
+                            base_blocks.get(rand.nextInt(base_blocks.size())).getModernID()
                     )
             );
             blocks.add(new Vec(x, y, z));
 
-            x += rand.nextInt(-1, 2);
-            y += rand.nextInt(-1, 2);
-            z += 3;
+            x += rand.nextInt(minX, maxX + 1);
+            y += rand.nextInt(minY, maxY + 1);
+            z += rand.nextInt(minZ, maxZ + 1);
         }
+        chunk.setBlock(lastX, lastY, lastZ,
+                new SimpleBlock(true, false, true,
+                        final_blocks.get(rand.nextInt(final_blocks.size())).getModernID()
+                )
+        );
     }
 
     @Override
@@ -80,20 +98,52 @@ public class FilterSessionHandler implements LimboSessionHandler {
 
         VirtualChunk chunk = factory.createVirtualChunk(0, 0);
 //        chunk.setBlock(8, 0, 8, new SimpleBlock(true, false, true, (short)1));
-        generateParkour(chunk, 8, 66, 0, 15);
+        generateParkour(chunk);
 
-        teleportPacket = factory.createPreparedPacket()
+        PreparedPacket preparedPacket = factory.createPreparedPacket();
+
+        teleportPacket = preparedPacket
                 .prepare(this.packets.createPositionRotationPacket(8.5, 67, 0, 0, 0, false, 0, false))
                 .build();
-        chunkPacket = factory.createPreparedPacket()
+        chunkPacket = preparedPacket
                 .prepare(this.packets.createChunkDataPacket(chunk.getFullChunkSnapshot(), Dimension.OVERWORLD))
                 .build();
 //        PreparedPacket packet = factory.createPreparedPacket()
 //                .prepare(teleportPacket).prepare(chunkPacket)
 //                .build();
-        player.getProxyPlayer().sendTitlePart(TitlePart.TITLE, FloriumFilter.it.serializer.deserialize(Settings.it.STRINGS.TITLE));
-        player.getProxyPlayer().sendTitlePart(TitlePart.SUBTITLE, FloriumFilter.it.serializer.deserialize(Settings.it.STRINGS.SUBTITLE));
+//        player.getProxyPlayer().sendTitlePart(TitlePart.TITLE, FloriumFilter.it.serializer.deserialize(Settings.it.STRINGS.TITLE));
+//        player.getProxyPlayer().sendTitlePart(TitlePart.SUBTITLE, FloriumFilter.it.serializer.deserialize(Settings.it.STRINGS.SUBTITLE));
 
+        player.writePacket(
+                preparedPacket.prepare(version -> {
+                    GenericTitlePacket packet =
+                            GenericTitlePacket.constructTitlePacket(
+                                    GenericTitlePacket.ActionType.SET_TITLE,
+                                    version
+                            );
+
+                    packet.setComponent(
+                            new ComponentHolder(version, FloriumFilter.it.serializer.deserialize(Settings.it.STRINGS.TITLE))
+                    );
+
+                    return packet;
+                }, ProtocolVersion.MINECRAFT_1_8)
+        );
+        player.writePacket(
+                preparedPacket.prepare(version -> {
+                    GenericTitlePacket packet =
+                            GenericTitlePacket.constructTitlePacket(
+                                    GenericTitlePacket.ActionType.SET_SUBTITLE,
+                                    version
+                            );
+
+                    packet.setComponent(
+                            new ComponentHolder(version, FloriumFilter.it.serializer.deserialize(Settings.it.STRINGS.SUBTITLE))
+                    );
+
+                    return packet;
+                }, ProtocolVersion.MINECRAFT_1_8)
+        );
         player.writePacket(chunkPacket);
         player.writePacket(teleportPacket);
 
@@ -119,8 +169,13 @@ public class FilterSessionHandler implements LimboSessionHandler {
 
         Vec v = blocks.getFirst();
         if (Math.sqrt(Math.pow(v.x - x, 2) + Math.pow(v.y + 1 - y, 2) + Math.pow(v.z - z, 2)) < 1.5) {
+//            player.writePacketAndFlush(factory.createPreparedPacket()
+//                    .prepare(new ClientboundCustomSoundPacket(
+//                            Key.key("minecraft:entity.experience_orb.pickup"),
+//                            Sound.Source.PLAYER, x, y, z, 1f, 1f))
+//                    .build());
             blocks.removeFirst();
-            player.getProxyPlayer().playSound(Sound.sound(Key.key("minecraft:entity.experience_orb.pickup"), Sound.Source.PLAYER, 1f, 1f));
+//            player.getProxyPlayer().playSound(Sound.sound(Key.key("minecraft:entity.experience_orb.pickup"), Sound.Source.PLAYER, 1f, 1f));
             return;
         }
 

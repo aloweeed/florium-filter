@@ -1,0 +1,6 @@
+{
+  "id": "leetfilter",
+  "name": "LeetFilter",
+  "version": "${version}",
+  "main": "im.aloweeed.LeetFilter"
+}
